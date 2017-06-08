@@ -12,20 +12,24 @@ String face_cascade_name = "lbpcascade_frontalface.xml"; //human face training d
 CascadeClassifier face_cascade; //face data classifier
 
 
-int detectAndDisplay(Mat, Mat);
+int detectAndDisplay(Mat, Mat, VideoWriter);
 
 
 int main( void ){
   Mat src, dst;
   Mat back, newBack, backMask;
   int frames;
-
+  Size videoSize;
+  VideoWriter writer;
   VideoCapture cap("hw3_sorce.mp4");
 
   if (!cap.isOpened()){
     printf("Cannot open video.\n");
     return 0;
   }
+
+  videoSize = Size(cap.get(CV_CAP_PROP_FRAME_WIDTH),cap.get(CV_CAP_PROP_FRAME_HEIGHT));
+  writer.open("hw3_output.avi", CV_FOURCC('M', 'J', 'P', 'G'), 30, videoSize);
 
   newBack = imread("background.jpg");
   if(newBack.data == 0){
@@ -57,6 +61,7 @@ int main( void ){
     imshow("input video", src);
     src.copyTo(dst); //dst for output
 
+    //change background
     absdiff(back, dst, backMask);
     cvtColor(backMask, backMask, CV_BGR2GRAY);
     threshold(backMask, backMask, 50, 255, THRESH_BINARY_INV);
@@ -65,20 +70,23 @@ int main( void ){
     imshow("Background Mask", backMask);
 
     //face
-    if(detectAndDisplay(src, dst) == -1) break;
+    if(detectAndDisplay(src, dst, writer) == -1) break;
 
   }
   return 0;
 }
 
 
-int detectAndDisplay(Mat src, Mat dst){
+int detectAndDisplay(Mat src, Mat dst, VideoWriter writer){
 
-  vector<Rect> faces;
-  static Rect faceROI;
   Mat src_gray;
   Mat newFace, newFaceMask;
   int i, rectSize, max = 0, maxIndex;
+  int textMove = dst.cols * 0.01;
+  vector<Rect> faces;
+  static Rect faceROI;
+  static Point textPt(dst.cols - textMove - 1, (int)dst.rows * 0.8);
+  static bool textRunLeft = true;
 
   cvtColor(src, src_gray, COLOR_BGR2GRAY);
   equalizeHist(src_gray, src_gray); //enhance contrast
@@ -108,7 +116,12 @@ int detectAndDisplay(Mat src, Mat dst){
   resize(newFaceMask, newFaceMask, Size(faceROI.width, faceROI.height));
   newFace.copyTo(dst(faceROI), newFaceMask);
 
+  textPt.x -= textRunLeft ? textMove : -textMove;
+  if(textPt.x < textMove || textPt.x > dst.cols - textMove) textRunLeft = !textRunLeft;
+  putText(dst, "M10515103", textPt,
+          FONT_HERSHEY_COMPLEX | FONT_ITALIC, 1, CV_RGB(0, 0, 0), 3, CV_AA);
 
+  writer.write(dst);
   imshow("output video", dst);
   waitKey(50);
   return 0;
