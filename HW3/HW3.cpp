@@ -11,9 +11,8 @@ using namespace std;
 String face_cascade_name = "lbpcascade_frontalface.xml"; //human face training data
 CascadeClassifier face_cascade; //face data classifier
 
-
 int detectAndDisplay(Mat, Mat, VideoWriter);
-
+bool skinCheck(bool, Mat, Rect);
 
 int main( void ){
   Mat src, dst;
@@ -64,18 +63,16 @@ int main( void ){
     //change background
     absdiff(back, dst, backMask);
     cvtColor(backMask, backMask, CV_BGR2GRAY);
-    threshold(backMask, backMask, 50, 255, THRESH_BINARY_INV);
+    threshold(backMask, backMask, 30, 255, THRESH_BINARY_INV);
     medianBlur(backMask, backMask, 5);
     newBack.copyTo(dst, backMask);
     imshow("Background Mask", backMask);
 
     //face
     if(detectAndDisplay(src, dst, writer) == -1) break;
-
   }
   return 0;
 }
-
 
 int detectAndDisplay(Mat src, Mat dst, VideoWriter writer){
 
@@ -83,8 +80,9 @@ int detectAndDisplay(Mat src, Mat dst, VideoWriter writer){
   Mat newFace, newFaceMask;
   int i, rectSize, max = 0, maxIndex;
   int textMove = dst.cols * 0.01;
+  bool changeFace;
   vector<Rect> faces;
-  static Rect faceROI;
+  static Rect faceROI((int) dst.cols / 2, (int) dst.rows / 2, dst.cols, dst.rows);
   static Point textPt(dst.cols - textMove - 1, (int)dst.rows * 0.8);
   static bool textRunLeft = true;
 
@@ -110,11 +108,22 @@ int detectAndDisplay(Mat src, Mat dst, VideoWriter writer){
     }
     //max face data
     faceROI = faces[maxIndex];
+    //enlarge roi
+    faceROI.x -= (int) faceROI.width * 0.1;
+    faceROI.y -= (int) faceROI.height * 0.1;
+    faceROI.width *= 1.2;
+    faceROI.height *= 1.2;
+
+    changeFace = skinCheck(true, src, faceROI);
   }
+  else changeFace = skinCheck(false, src, faceROI);
+
   //change face
-  resize(newFace, newFace, Size(faceROI.width, faceROI.height));
-  resize(newFaceMask, newFaceMask, Size(faceROI.width, faceROI.height));
-  newFace.copyTo(dst(faceROI), newFaceMask);
+  if(changeFace){
+    resize(newFace, newFace, Size(faceROI.width, faceROI.height));
+    resize(newFaceMask, newFaceMask, Size(faceROI.width, faceROI.height));
+    newFace.copyTo(dst(faceROI), newFaceMask);
+  }
 
   textPt.x -= textRunLeft ? textMove : -textMove;
   if(textPt.x < textMove || textPt.x > dst.cols - textMove) textRunLeft = !textRunLeft;
@@ -125,4 +134,26 @@ int detectAndDisplay(Mat src, Mat dst, VideoWriter writer){
   imshow("output video", dst);
   waitKey(50);
   return 0;
+}
+
+bool skinCheck(bool face, Mat img, Rect roi){
+
+  static int faceSize = 0;
+  int size = 0;
+  int i, j;
+  Mat skin;
+
+  cvtColor(img(roi), skin, CV_BGR2HSV);
+  for(i = 0; i < skin.rows; i++){
+    for(j = 0; j < skin.cols; j++){
+      if(skin.at<Vec3b>(i, j)[0] < 20) size++;
+    }
+  }
+
+  if(face){
+    faceSize = faceSize == 0 ? size : (int) (faceSize + size) / 2;
+    return true;
+  }
+  if(size < faceSize / 2) return false;
+  return true;
 }
